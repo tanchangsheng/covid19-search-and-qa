@@ -1,0 +1,11 @@
+pydantic==1.6.1
+trafilatura==0.5.1
+uvicorn==0.11.8
+spacy==2.3.2
+elasticsearch==7.9.1
+tika==1.24
+urllib3==1.25.10
+lxml==4.5.2
+beautifulsoup4==4.9.1
+fastapi==0.61.1
+git+https://github.com/deepset-ai/haystack.git@06e8be3
