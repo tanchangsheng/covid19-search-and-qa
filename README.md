@@ -1,8 +1,10 @@
 # covid19-search-and-qa
-Covid-19 Advisories Search and Question Answering with Transformers.
+[Covid-19 Phase 2 Sector Advisories](https://www.moh.gov.sg/covid-19/phase-2-sector-related-advisories) Search and Question Answering with Transformers. 
 
-Search and question answering system for [Covid-19 Phase 2 Sector-Related Advisories](https://www.moh.gov.sg/covid-19/phase-2-sector-related-advisories).
 A mini project to try out document question answering with transformers using [Haystack](https://github.com/deepset-ai/haystack) and [FastAPI](https://github.com/tiangolo/fastapi).
+
+## Why am I doing this?
+[Huggingface transformers](https://github.com/huggingface/transformers) have massively disrupted the NLP field in recent times as it provides an intuitive interface to access the almighty transformer models. Therefore, embarking on this mini project was one of the best opportunities to apply it to a real world use case and create positive value at the same time. Another objective of this project was also to get my hands dirty with a relatively new, modern web framework for building APIs, [FastAPI](https://github.com/tiangolo/fastapi), that have also been making waves due to it's performance and intuitive design.
 
 ## Show me what it does!
 1. Search and Question Answering
@@ -12,7 +14,7 @@ A mini project to try out document question answering with transformers using [H
 ![queston-answering-filter](./qa-filter.gif)
 
 ## What's so good about this?
-In the current state of the new normal, official announcements and advisories provide guidelines of how we can resume our daily activities safely. However, there is simply too many documents covering various aspects of our daily lives and businesses. FAQ documents may help to highlight key points but it is often time consuming to create and may not have a comprehensive coverage.
+In the current state of the new normal, [official announcements and advisories](https://www.moh.gov.sg/covid-19/phase-2-sector-related-advisories) provide guidelines for how we can resume our daily activities safely. However, there is simply too many documents covering various aspects of our daily lives and businesses. FAQ documents may help to highlight key points but it is often time consuming to create and may not have a comprehensive coverage.
 
 With [Haystack](https://github.com/deepset-ai/haystack), we are able to use [pretrained transformer models](https://huggingface.co/deepset/roberta-base-squad2) to read the content of the advisories and provide relevant answers to user queries, **directly retrieving relevant answers from the documents** itself instead of relying on manually curated FAQs.
 
