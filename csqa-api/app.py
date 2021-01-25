@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 @app.get("/answers", response_model=List[Answer])
-def get_answers(query: Optional[str] = "", filters:  Optional[str] = None):
+async def get_answers(query: Optional[str] = "", filters:  Optional[str] = None):
     top_k_retriever = 5
     top_k_reader = 3
     if filters and len(filters) > 0:
@@ -54,7 +54,7 @@ def get_answers(query: Optional[str] = "", filters:  Optional[str] = None):
 
 
 @app.get("/search", response_model=SearchResponse)
-def search(query: Optional[str] = None, filters: Optional[str] = None, start: Optional[int] = 0,
+async def search(query: Optional[str] = None, filters: Optional[str] = None, start: Optional[int] = 0,
            size: Optional[int] = 10):
     should_queries = []
     if filters and len(filters) > 0:

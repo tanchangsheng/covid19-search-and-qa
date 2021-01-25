@@ -1,7 +1,7 @@
 from haystack import Finder
 from haystack.reader.farm import FARMReader
 from haystack.retriever.sparse import ElasticsearchRetriever
-from haystack.database.elasticsearch import ElasticsearchDocumentStore
+from haystack.document_store.elasticsearch import ElasticsearchDocumentStore
 
 document_store = ElasticsearchDocumentStore(host="localhost", username="", password="", index="document")
 retriever = ElasticsearchRetriever(document_store=document_store)

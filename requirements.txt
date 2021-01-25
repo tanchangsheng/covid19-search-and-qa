@@ -8,4 +8,4 @@ urllib3==1.25.10
 lxml==4.5.2
 beautifulsoup4==4.9.1
 fastapi==0.61.1
-git+https://github.com/deepset-ai/haystack.git@06e8be3
+farm-haystack==0.7.0

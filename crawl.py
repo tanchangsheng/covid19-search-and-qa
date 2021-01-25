@@ -8,18 +8,9 @@ full_doc_index = "full_document"
 
 es_client = Elasticsearch([url],  port=port)
 
-match_all_query = {
-  "query": {
-    "match_all": {}
-  }
-}
-
 print("Deleting all documents in document index...")
-# es_client.delete_by_query(index, body=match_all_query, request_timeout=30, ignore=404)
-# es_client.delete_by_query(full_doc_index, body=match_all_query, request_timeout=30, ignore=404)
 es_client.indices.delete(index, ignore_unavailable=True)
 es_client.indices.delete(full_doc_index, ignore_unavailable=True)
-
 
 mapping = {
     "mappings": {
@@ -81,18 +72,27 @@ mapping = {
         }
     }
 }
+
+# create es index to store full documents
 es_client.indices.create(index=full_doc_index, body=mapping, ignore=400)
 
 import re
 import spacy
 from spacy.lang.en import English
 
-nlp = English()  # just the language with no model
+# init Language object
+nlp = English() 
+
+# use simple sentence boundary detection logic that does not 
+# require dependency parse thus keeping pipeline light and fast
 sentencizer = nlp.create_pipe("sentencizer")
 nlp.add_pipe(sentencizer)
 
+
+# setting the rough document segment size
+# set to 50-150 words per segment
 MIN_SEG_SIZE = 50
-ROUGH_SEG_SIZE = 100
+ROUGH_SEG_SIZE = 200
 
 def text2segments(text):
     clean_space = re.sub("\\s+", " ", text)
@@ -113,7 +113,6 @@ def text2segments(text):
     # if there are leftover tokens from the doc not added to segments        
     if curr_size > 0:
         seg = doc[seg_end:sent_end+1].text
-        # if last segment has <=25 tokens
         if curr_size <= MIN_SEG_SIZE:
             if segments:
                 segments[-1] += " " + seg
@@ -136,24 +135,29 @@ from lxml import html
 import hashlib
 from datetime import datetime
 
+# get the root url of the site so that it can be prepended to 
+# relative paths on the site to make complete, navigable paths
 def get_root_url(link):
     return urlparse(link).scheme + "://" + urlparse(link).hostname
 
-# return bs object or pdf text content for the page and its root url
+# get the page content (bs object if html, or text content if pdf)
+# get the root_url
+# get the type of page
 def get_page(link):
     page = http.request("GET", link)
     headers = page.headers
     if "Content-Type" in headers:
-        if "application/pdf" in headers["Content-Type"]:
+        if "application/pdf" in headers["Content-Type"] or link[-4:] == ".pdf":
             page_content = parser.from_buffer(page.data, TIKA_API)["content"]
             page_type = "pdf"
-        if "text/html" in headers["Content-Type"]:
+        else:
+            # else treat as html page by default
             page_content = bs(page.data.decode('utf-8'), 'lxml')
             page_type = "html"
     root_url = get_root_url(link)
     return page_content, root_url, page_type 
 
-# get main text of from html string
+# get main text body from html string
 def get_main_text_html(page):
     html_page = html.fromstring(str(page))
     extracted = trafilatura.extract(html_page)
@@ -161,7 +165,8 @@ def get_main_text_html(page):
         return extracted
     print("Using default page text")
     return page.text
-    
+
+# extract pdfs from page (bs object)
 def extract_pdf_links(page, root_url):
     links = []
     for link in page.select("a[href*='.pdf']"):
@@ -171,6 +176,7 @@ def extract_pdf_links(page, root_url):
         links.append(link)
     return links
     
+# create readable title from pdf urls
 def link2title(link):
     link = link.split("/")[-1]
     file_name = re.match("(.*.pdf)", link.split("/")[-1]).groups()[0]
@@ -179,8 +185,12 @@ def link2title(link):
     file_name = file_name.title()
     return file_name
 
-SEGMENT_BATCH_SIZE = 20
-# convert segments into document object structure and group them into batches for ingestion later
+# number of segments to ingest to ES per request
+SEGMENT_BATCH_SIZE = 50
+
+# convert segments into document object structure
+# create hash of documents for deduplication later
+# and group them into batches for ingestion to ES index
 def prepare_segments(sector, date, title, link, segments):
     prepared_segments = []
     prepared_segments_part = []
@@ -208,10 +218,12 @@ def prepare_segments(sector, date, title, link, segments):
     return prepared_segments
 
 
-from haystack.database.elasticsearch import ElasticsearchDocumentStore
+from haystack.document_store.elasticsearch import ElasticsearchDocumentStore
 
+# init haystack ES client with custom mappings
 document_store = ElasticsearchDocumentStore(host="localhost", username="", password="", index="document", custom_mapping=mapping)
 
+# ingest full document (no splitting to segments)
 def prepare_ingest_full_document(sector, date, title, link, page_content):
     document = {}
     document["title"] = title
@@ -226,6 +238,7 @@ def prepare_ingest_full_document(sector, date, title, link, page_content):
     document["text"] = page_content
     es_client.index(index=full_doc_index, body=document)
 
+# ingest segments in batches
 def ingest_prepared_segments(prepared_segments):
     for prepared_segment_part in prepared_segments:
         document_store.write_documents(prepared_segment_part)
@@ -240,12 +253,13 @@ def process_pdf(sector_name, advisory_date, advisory_title, advisory_link, page_
     prepared_segments = prepare_segments(sector_name, advisory_date, advisory_title, advisory_link, segments)
     ingest_prepared_segments(prepared_segments)
 
-# split html into small segments, then ingest
-# extract all pdf links(append root url if it's relative link), then perform get_page() and ingest_pdf()
+# process and ingest html page
+# whole page is ingested, segments are ingested as well
+# extract all pdf links and process them for ingestion
 def process_html(sector_name, advisory_date, advisory_title, advisory_link, page, site_root_url):
-
+    
     main_text = get_main_text_html(page)
-
+    
     # index whole document
     prepare_ingest_full_document(sector_name, advisory_date, advisory_title, advisory_link, main_text)
 
@@ -263,6 +277,7 @@ def process_html(sector_name, advisory_date, advisory_title, advisory_link, page
         pdf_title = link2title(link)
         process_pdf(sector_name, advisory_date, pdf_title, link, pdf_content)
 
+# get metadata of advisory
 def get_advisory_info(advisory_row, root_url):
     advisory_cols = advisory_row.find_all("td")
     advisory_date = advisory_cols[0].text
@@ -272,6 +287,7 @@ def get_advisory_info(advisory_row, root_url):
         advisory_link = root_url + advisory_link
     return advisory_date, advisory_title, advisory_link
 
+# process advisories from each sector
 def process_sector_block(sector_block, root_url):
     contents = sector_block.find_all("div", {"class": "sfContentBlock"})
     sector_name = contents[0].text.replace("\n", "")
@@ -290,13 +306,13 @@ def process_sector_block(sector_block, root_url):
         if page_type == "html":
             process_html(sector_name, advisory_date, advisory_title, advisory_link, page_content, site_root_url)
 
-# process the advisories home page bs4
+# process the advisories home page by splitting them into advisories by sector
 def process_main_page(page, root_url):
     sector_blocks = page.find_all("div", {"class": "sf_cols"})
     for sector_block in sector_blocks:
         process_sector_block(sector_block, root_url)
 
-
+# endpoint of tika application
 TIKA_API = "http://localhost:9998/tika"
 HOME_LINK = "https://www.moh.gov.sg/covid-19/phase-2-sector-related-advisories"
 
@@ -304,9 +320,7 @@ http = urllib3.PoolManager()
 page_content, root_url, _ = get_page(HOME_LINK)
 process_main_page(page_content, root_url)
 
-
-
-
+# agg query for finding duplicate segments based on hash
 query={
   "aggs": {
     "duplicated_hash": {
@@ -328,6 +342,7 @@ query={
   }
 }
 
+# remove duplicated segments from ES index
 def remove_duplicates(index):
     has_duplicates = True
 
@@ -356,7 +371,7 @@ def remove_duplicates(index):
                 for item in deletes:
                     pass
             except:
-                print("Error encountered during bulk.")
+                pass
             print(len(ids_to_delete), "duplicates was removed.")
         else:
             has_duplicates = False
